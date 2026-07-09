@@ -10,13 +10,12 @@ You have full control over the exact colors for both Stance 1 (Crowd Clear) and 
 **Main features**
 
 
-Custom Stance Colors: Set independent colors for your default stance and your armor-piercing special stance.
-Dial in your exact colors (0-255) and adjust the glow intensity (0-100) to make the blades as bright or dim as you want.
-Teammate Toggle: Choose whether to apply your custom colors to teammates' Transonic Blades on your screen, or restrict the visual changes only to your own weapon. (Note: This mod is strictly client-side; other players will not see your custom colors).
-RGB Gaming Modes: Praise The Omnissiah for double RGB light sticks!
-Chordclaw Glow Color (NEW): With its own settings that have 6 modes:  Follow Active Stance (Default),  Follow Stance 1 Only,  Follow Stance 2 Only,  Independent Static Color,  Independent RGB Cycle,  Disabled (Vanilla). 
-Visible Equipment Integration (NEW): Full compatibility with Visible Equipment mod. Your sheathed weapon on your back will glow with the correct stance color.
-Inventory & UI Previews (NEW): See your custom colors and RGB cycles live in your inventory menu and loadout screens.
+**Custom Stance Colors:** Set independent colors for your default stance and your armor-piercing special stance. Dial in your exact colors (0-255) and adjust the glow intensity (0-100) to make the blades as bright or dim as you want.
+**Teammate Toggle:** Choose whether to apply your custom colors to teammates' Transonic Blades on your screen, or restrict the visual changes only to your own weapon. (Note: This mod is strictly client-side; other players will not see your custom colors).
+**RGB Gaming Modes:** Praise The Omnissiah for double RGB light sticks!
+**Chordclaw Glow Color:** With its own settings that have 6 modes:  Follow Active Stance (Default),  Follow Stance 1 Only,  Follow Stance 2 Only,  Independent Static Color,  Independent RGB Cycle,  Disabled (Vanilla). 
+**Visible Equipment Integration:** Full compatibility with Visible Equipment mod. Your sheathed weapon on your back will glow with the correct stance color.
+**Inventory & UI Previews:** See your custom colors and RGB cycles live in your inventory menu and loadout screens.
 
 **Requirements**
 
