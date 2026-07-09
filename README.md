@@ -31,9 +31,13 @@ Put the mod name as 'transonic_stance_colors' on the mod_load_order.txt
 To avoid any issues, put visible equipment on top of mod order.
 Example on mod_load_order.txt:
 visible_equipment
+
 .
+
 .
+
 .
+
 transonic_stance_colors
 
 **Disclaimer**
