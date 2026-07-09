@@ -41,7 +41,6 @@
 local mod = get_mod("transonic_stance_colors")
 local VisualLoadoutCustomization = require("scripts/extension_systems/visual_loadout/utilities/visual_loadout_customization")
 
--- ##########################################################
 -- ################## State & Setup #########################
 
 local MAIN_MATERIAL_CANDIDATES = { "emissive_color", "tint_color", "energy_color", "color", "blade_color", "energy_tint" }
