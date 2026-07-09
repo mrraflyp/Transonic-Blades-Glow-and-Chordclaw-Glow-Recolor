@@ -13,6 +13,7 @@ mod._is_unwielding = false
 mod._cached_player_unit = nil
 mod._cached_visual_ext = nil
 mod._last_cc_stance = nil
+mod._last_cc_color_key = nil
 mod._force_cc_update = true
 
 local ve_state_cache = setmetatable({}, { __mode = "k" })
@@ -27,8 +28,12 @@ local effect_owner_cache = setmetatable({}, { __mode = "k" })
 local settings_cache = {
     apply_others = false,
     ve_glow_enabled = true,
-    chordclaw_glow_enabled = true,
     inventory_enabled = false,
+    
+    chordclaw_mode = "both",
+    cc_static = { r = 128, g = 0, b = 255, i = 2.0 },
+    cc_rgb = { speed = 1.0, slow = 0.01, intensity = 2.0 },
+
     rgb_target = "disabled",
     rgb_speed = 0.5,
     rgb_speed_slow = 0.5,
@@ -40,9 +45,18 @@ local settings_cache = {
 local function update_settings_cache()
     settings_cache.apply_others = mod:get("apply_to_others") or false
     settings_cache.ve_glow_enabled = mod:get("ve_glow_enabled") == nil and true or mod:get("ve_glow_enabled")
-    settings_cache.chordclaw_glow_enabled = mod:get("chordclaw_glow_enabled") == nil and true or mod:get("chordclaw_glow_enabled")
     settings_cache.inventory_enabled = mod:get("inventory_glow_enabled") or false
     
+    settings_cache.chordclaw_mode = mod:get("chordclaw_mode") or "both"
+    settings_cache.cc_static.r = mod:get("cc_r") or 128
+    settings_cache.cc_static.g = mod:get("cc_g") or 0
+    settings_cache.cc_static.b = mod:get("cc_b") or 255
+    settings_cache.cc_static.i = mod:get("cc_intensity") or 2.0
+    
+    settings_cache.cc_rgb.speed = mod:get("cc_rgb_speed") or 1.0
+    settings_cache.cc_rgb.slow = mod:get("cc_rgb_slow") or 0.01
+    settings_cache.cc_rgb.intensity = mod:get("cc_rgb_intensity") or 2.0
+
     settings_cache.rgb_target = mod:get("rgb_cycle_target") or "disabled"
     settings_cache.rgb_speed = mod:get("rgb_cycle_speed") or 0
     settings_cache.rgb_speed_slow = mod:get("rgb_cycle_slow") or 0.5
@@ -101,13 +115,11 @@ local unit_to_player_map = setmetatable({}, { __mode = "k" })
 local function get_weapon_owner_type(weapon_unit)
     if not weapon_unit then return "unknown" end
     
-    -- Fast Path: Check memory cache first
     if owner_type_cache[weapon_unit] then 
         return owner_type_cache[weapon_unit] 
     end
     
     local parent_unit = unit_to_player_map[weapon_unit]
-    
     if not parent_unit then return "unknown" end
     if not Managers.state or not Managers.state.player_unit_spawn then return "ui" end
     
@@ -145,8 +157,6 @@ end
 
 local function is_effect_local_player(effect_instance)
     if not effect_instance then return false end
-
-    -- Fast Path: Check memory cache first
     if effect_owner_cache[effect_instance] ~= nil then
         return effect_owner_cache[effect_instance]
     end
@@ -169,11 +179,7 @@ local function is_effect_local_player(effect_instance)
         end
     end
     
-    -- Save the result to cache so we never have to run this heavy lookup again for this instance
-    if current_player_unit then
-        effect_owner_cache[effect_instance] = is_local
-    end
-    
+    if current_player_unit then effect_owner_cache[effect_instance] = is_local end
     return is_local
 end
 
@@ -211,6 +217,33 @@ local function get_inventory_color(t_val)
     return Vector3((c.r / 255) * c.i, (c.g / 255) * c.i, (c.b / 255) * c.i), false
 end
 
+local function get_chordclaw_color(t_val, blade_current_color, blade_is_rgb)
+    local mode = settings_cache.chordclaw_mode
+    if mode == "disabled" then return nil, false end
+    if mode == "both" then return blade_current_color, blade_is_rgb end
+    
+    if mode == "stance_1" then
+        local c = settings_cache.stance_1
+        return Vector3((c.r / 255) * c.i, (c.g / 255) * c.i, (c.b / 255) * c.i), false
+    end
+    if mode == "stance_2" then
+        local c = settings_cache.stance_2
+        return Vector3((c.r / 255) * c.i, (c.g / 255) * c.i, (c.b / 255) * c.i), false
+    end
+    if mode == "static" then
+        local c = settings_cache.cc_static
+        return Vector3((c.r / 255) * c.i, (c.g / 255) * c.i, (c.b / 255) * c.i), false
+    end
+    if mode == "rgb" then
+        local w = settings_cache.cc_rgb
+        local speed = w.speed == 0 and w.slow or w.speed
+        local hue = (t_val * speed) % 1.0
+        local r, g, b = hsv_to_rgb(hue, 1.0, 1.0)
+        return Vector3(r * w.intensity, g * w.intensity, b * w.intensity), true
+    end
+    return nil, false
+end
+
 local function apply_color_to_ve_unit(u, current_color, is_rgb)
     if not u or not Unit.alive(u) then return end
     
@@ -219,15 +252,10 @@ local function apply_color_to_ve_unit(u, current_color, is_rgb)
 
     if not is_rgb then
         local state = ve_state_cache[u]
-        if state and state.stance == current_stance and state.color == color_key then
-            return
-        end
+        if state and state.stance == current_stance and state.color == color_key then return end
     end
 
-    ve_state_cache[u] = {
-        stance = current_stance,
-        color = color_key
-    }
+    ve_state_cache[u] = { stance = current_stance, color = color_key }
 
     local stance_value = current_stance and 1.0 or 0.0
     for m = 1, #EXACT_MATS do
@@ -264,9 +292,7 @@ local function update_blade_color(effect_instance, t_val, force_static)
         or (rgb_target == "stance_1" and not is_special)
         or (rgb_target == "stance_2" and is_special)
 
-    if not use_rgb and not force_static then
-        return
-    end
+    if not use_rgb and not force_static then return end
 
     local color_vec
     if use_rgb then
@@ -327,7 +353,7 @@ end)
 mod:hook_safe(CLASS.TransonicWeaponEffects, "init", function(self) tracked_weapon_effects[self] = true end)
 mod:hook_safe(CLASS.TransonicWeaponEffects, "destroy", function(self) 
     tracked_weapon_effects[self] = nil 
-    effect_owner_cache[self] = nil -- Free memory when weapon is destroyed
+    effect_owner_cache[self] = nil
 end)
 
 mod:hook_safe(CLASS.TransonicWeaponEffects, "update", function(self, unit, dt, t) 
@@ -363,27 +389,22 @@ local function get_locally_wielded_units()
             local vars_1p = effect_instance._weapon_material_variables_1p
             local vars_3p = effect_instance._weapon_material_variables_3p
             if vars_1p then
-                for i = 1, #vars_1p do
-                    local u = vars_1p[i].unit
-                    if u then wielded[u] = true end
-                end
+                for i = 1, #vars_1p do if vars_1p[i].unit then wielded[vars_1p[i].unit] = true end end
             end
             if vars_3p then
-                for i = 1, #vars_3p do
-                    local u = vars_3p[i].unit
-                    if u then wielded[u] = true end
-                end
+                for i = 1, #vars_3p do if vars_3p[i].unit then wielded[vars_3p[i].unit] = true end end
             end
         end
     end
     return wielded
 end
 
--- The holy grail loop: runs every frame, overrides the engine, integrates with visible_equipment
+-- ##########################################################
+-- ##################### Update Loop ########################
+
 mod.update = function(dt)
     local t = Managers.time and Managers.time:time("main") or 0
     local current_color, is_rgb_active = get_inventory_color(t)
-
     local locally_wielded = get_locally_wielded_units()
 
     -- 1. Update UI Preview Dummies
@@ -391,9 +412,7 @@ mod.update = function(dt)
         preview_t = preview_t + dt
         
         local ui_color, ui_is_rgb = nil, false
-        if settings_cache.inventory_enabled then
-            ui_color, ui_is_rgb = get_inventory_color(preview_t)
-        end
+        if settings_cache.inventory_enabled then ui_color, ui_is_rgb = get_inventory_color(preview_t) end
         
         for i = #transonic_preview_units, 1, -1 do
             local unit = transonic_preview_units[i]
@@ -418,27 +437,15 @@ mod.update = function(dt)
                 for eq_comp, slots in pairs(pt.item_units_by_equipment_component) do
                     local primary_unit = slots["slot_primary"]
                     if primary_unit and Unit.alive(primary_unit) then
-                        
                         local owner = get_weapon_owner_type(primary_unit)
-                        local should_glow = false
-                        
-                        if owner == "local" or owner == "ui" then
-                            should_glow = true
-                        elseif owner == "teammate" then
-                            should_glow = settings_cache.apply_others
-                        end
+                        local should_glow = (owner == "local" or owner == "ui") or (owner == "teammate" and settings_cache.apply_others)
                         
                         if should_glow and current_color then
-                            if not locally_wielded[primary_unit] then
-                                apply_color_to_ve_unit(primary_unit, current_color, is_rgb_active)
-                            end
-                            
+                            if not locally_wielded[primary_unit] then apply_color_to_ve_unit(primary_unit, current_color, is_rgb_active) end
                             local attachments = pt.attachment_units_by_equipment_component[eq_comp]
                             if attachments and attachments["slot_primary"] and attachments["slot_primary"][primary_unit] then
                                 for _, att in ipairs(attachments["slot_primary"][primary_unit]) do
-                                    if not locally_wielded[att] then
-                                        apply_color_to_ve_unit(att, current_color, is_rgb_active)
-                                    end
+                                    if not locally_wielded[att] then apply_color_to_ve_unit(att, current_color, is_rgb_active) end
                                 end
                             end
                         end
@@ -448,8 +455,9 @@ mod.update = function(dt)
         end
     end
 
-    -- 3. Chordclaw Ability Dynamic Sync (Highly Optimized)
-    if settings_cache.chordclaw_glow_enabled and current_color then
+    -- 3. Chordclaw Ability Dynamic Sync
+    local cc_mode = settings_cache.chordclaw_mode
+    if cc_mode ~= "disabled" then
         local current_player_unit = get_safe_local_player_unit()
 
         if current_player_unit ~= mod._cached_player_unit then
@@ -465,21 +473,27 @@ mod.update = function(dt)
         if mod._cached_visual_ext and mod._cached_visual_ext._equipment then
             local claw_slot = mod._cached_visual_ext._equipment["slot_combat_ability"]
             if claw_slot then
-                
-                if is_rgb_active or mod._force_cc_update or mod._last_cc_stance ~= mod._last_known_special_active then
+                local cc_color, cc_is_rgb = get_chordclaw_color(t, current_color, is_rgb_active)
+                local color_key = cc_color and string.format("%.3f,%.3f,%.3f", cc_color.x, cc_color.y, cc_color.z) or "none"
+
+                -- Dynamic updater based on selected mode
+                if cc_is_rgb or mod._force_cc_update or mod._last_cc_color_key ~= color_key or (cc_mode == "both" and mod._last_cc_stance ~= mod._last_known_special_active) then
+                    
                     mod._last_cc_stance = mod._last_known_special_active
+                    mod._last_cc_color_key = color_key
                     mod._force_cc_update = false
 
-                    local function apply_to_unit(u)
-                        if u and Unit.alive(u) then
-                            for j = 1, #CLAW_MATERIAL_CANDIDATES do
-                                pcall(Unit.set_vector3_for_materials, u, CLAW_MATERIAL_CANDIDATES[j], current_color, true)
+                    if cc_color then
+                        local function apply_to_unit(u)
+                            if u and Unit.alive(u) then
+                                for j = 1, #CLAW_MATERIAL_CANDIDATES do
+                                    pcall(Unit.set_vector3_for_materials, u, CLAW_MATERIAL_CANDIDATES[j], cc_color, true)
+                                end
                             end
                         end
+                        apply_to_unit(claw_slot.unit_1p)
+                        apply_to_unit(claw_slot.unit_3p)
                     end
-
-                    apply_to_unit(claw_slot.unit_1p)
-                    apply_to_unit(claw_slot.unit_3p)
                 end
             end
         end
